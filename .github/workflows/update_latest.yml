@@ -1,0 +1,30 @@
+name: Update Latest APK
+
+on:
+  push:
+    paths:
+      - "*.apk"
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find APK
+        run: |
+          APK=$(find . -maxdepth 1 -name "*.apk" | head -n 1)
+          mkdir -p docs
+          cp "$APK" docs/latest.apk
+
+      - name: Commit latest.apk
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add docs/latest.apk
+          git commit -m "Update latest apk" || echo "No changes"
+          git push
