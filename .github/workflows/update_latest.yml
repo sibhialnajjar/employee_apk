@@ -3,6 +3,7 @@ name: Update Latest APK
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -10,15 +11,24 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    if: github.event.release.tag_name != 'latest'
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Download versioned APK from release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.event.release.tag_name }}"
+
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release list --repo "${{ github.repository }}" --limit 10 \
+              --json tagName -q '.[] | select(.tagName != "latest") | .tagName' | head -n 1)
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "No release found"
+            exit 1
+          fi
 
           ASSET_NAME=$(gh release view "$TAG" --repo "${{ github.repository }}" \
             --json assets -q '.assets[] | select(.name | endswith(".apk")) | select(.name != "latest.apk") | .name' \
@@ -29,29 +39,21 @@ jobs:
             exit 1
           fi
 
-          echo "Using APK asset: $ASSET_NAME"
-          mkdir -p docs
+          echo "Using APK from release $TAG: $ASSET_NAME"
+          mkdir -p dist
           gh release download "$TAG" --repo "${{ github.repository }}" \
-            --pattern "$ASSET_NAME" --dir docs --clobber
-          cp "docs/$ASSET_NAME" docs/latest.apk
-
-      - name: Commit latest.apk
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add docs/latest.apk
-          git diff --staged --quiet || git commit -m "Update latest.apk from release ${{ github.event.release.tag_name }}"
-          git push
+            --pattern "$ASSET_NAME" --dir dist --clobber
+          cp "dist/$ASSET_NAME" dist/latest.apk
 
       - name: Update stable latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view latest --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload latest docs/latest.apk --repo "${{ github.repository }}" --clobber
+            gh release upload latest dist/latest.apk --repo "${{ github.repository }}" --clobber
           else
-            gh release create latest docs/latest.apk \
+            gh release create latest dist/latest.apk \
               --repo "${{ github.repository }}" \
               --title "Latest" \
-              --notes "رابط ثابت لآخر نسخة من التطبيق. يتم التحديث تلقائياً عند نشر أي إصدار جديد."
+              --notes "رابط ثابت لآخر نسخة. يُحدَّث تلقائياً عند نشر أي إصدار جديد."
           fi
