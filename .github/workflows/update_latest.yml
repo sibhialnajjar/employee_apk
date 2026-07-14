@@ -1,9 +1,8 @@
 name: Update Latest APK
 
 on:
-  push:
-    paths:
-      - "*.apk"
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -15,16 +14,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Find APK
+      - name: Download versioned APK from release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          APK=$(find . -maxdepth 1 -name "*.apk" | head -n 1)
+          TAG="${{ github.event.release.tag_name }}"
+
+          ASSET_NAME=$(gh release view "$TAG" --repo "${{ github.repository }}" \
+            --json assets -q '.assets[] | select(.name | endswith(".apk")) | select(.name != "latest.apk") | .name' \
+            | head -n 1)
+
+          if [ -z "$ASSET_NAME" ]; then
+            echo "No versioned APK found in release $TAG"
+            exit 1
+          fi
+
+          echo "Using APK asset: $ASSET_NAME"
           mkdir -p docs
-          cp "$APK" docs/latest.apk
+          gh release download "$TAG" --repo "${{ github.repository }}" \
+            --pattern "$ASSET_NAME" --dir docs --clobber
+          cp "docs/$ASSET_NAME" docs/latest.apk
 
       - name: Commit latest.apk
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add docs/latest.apk
-          git commit -m "Update latest apk" || echo "No changes"
+          git diff --staged --quiet || git commit -m "Update latest.apk from release ${{ github.event.release.tag_name }}"
           git push
+
+      - name: Update stable latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view latest --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload latest docs/latest.apk --repo "${{ github.repository }}" --clobber
+          else
+            gh release create latest docs/latest.apk \
+              --repo "${{ github.repository }}" \
+              --title "Latest" \
+              --notes "رابط ثابت لآخر نسخة من التطبيق. يتم التحديث تلقائياً عند نشر أي إصدار جديد."
+          fi
