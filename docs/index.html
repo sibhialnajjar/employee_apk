@@ -2,10 +2,21 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0;url=https://github.com/sibhialnajjar/employee_apk/releases/download/latest/latest.apk">
     <title>جاري التنزيل...</title>
+    <script>
+        fetch('latest.json')
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var url = 'https://github.com/sibhialnajjar/employee_apk/releases/download/latest/'
+                    + encodeURIComponent(data.file);
+                window.location.replace(url);
+            })
+            .catch(function () {
+                document.getElementById('status').textContent = 'تعذر بدء التنزيل. حاول لاحقاً.';
+            });
+    </script>
 </head>
 <body>
-    <p>جاري التنزيل... <a href="https://github.com/sibhialnajjar/employee_apk/releases/download/latest/latest.apk">اضغط هنا إن لم يبدأ التنزيل</a></p>
+    <p id="status">جاري التنزيل...</p>
 </body>
 </html>
